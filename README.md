@@ -65,18 +65,36 @@ Every outline carries an **accuracy tier**, shown on screen at all times:
 Dashed on screen means inferred. Solid means measured. This is not decoration — it is the thing that keeps
 a reconstruction from being overclaimed in cross-examination.
 
-## Running it
+## Live
 
-It is static files with no build step. Open `index.html` over HTTP:
+**https://chauhaddi.netlify.app**
+
+Press **Example** for a worked matter: two deeds for the same plot 45 years apart, plus a survey that
+agrees with neither.
+
+## Running it locally
+
+Static files, no build step:
 
 ```bash
-python3 -m http.server 8080
+python3 -m http.server 8123
 ```
 
-Then visit `http://localhost:8080`. Press **Example** for a worked matter — two deeds for the same plot
-45 years apart, plus a survey that agrees with neither.
+Then visit `http://localhost:8123`.
 
-WebXR needs HTTPS (or localhost). On GitHub Pages that is automatic.
+WebXR needs a secure context, so the VR mode works from the live HTTPS URL or from `localhost`, but
+**not** from a plain `http://` LAN address. The failure there is silent: no ENTER VR button and no
+error. Use the live URL on the headset.
+
+## Deploying
+
+```bash
+./deploy.sh
+```
+
+Zips the site and posts it to Netlify. The auth token is read from the Netlify CLI's own config on
+your machine, so nothing secret lives in this repository. If you have never logged in here, run
+`npx netlify-cli login` once first.
 
 ## Using it on a real matter
 

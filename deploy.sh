@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Redeploy Chauhaddi to Netlify.
+#
+#   ./deploy.sh
+#
+# Zips the static site and posts it to the Netlify deploy API. No build step,
+# because there is nothing to build.
+#
+# The auth token is read from the Netlify CLI's own config on this machine
+# (~/Library/Preferences/netlify/config.json). Nothing secret is stored in this
+# repository, and nothing is read from the environment. If you have never logged
+# in on this machine, run `npx netlify-cli login` once first.
+
+set -euo pipefail
+
+SITE_NAME="${NETLIFY_SITE_NAME:-chauhaddi}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CFG="$HOME/Library/Preferences/netlify/config.json"
+
+if [ ! -f "$CFG" ]; then
+  echo "No Netlify config at $CFG — run 'npx netlify-cli login' once, then retry." >&2
+  exit 1
+fi
+
+TOKEN="$(python3 - "$CFG" <<'PY'
+import json, sys, pathlib
+d = json.loads(pathlib.Path(sys.argv[1]).read_text())
+users = d.get("users") or {}
+for u in users.values():
+    tok = (u.get("auth") or {}).get("token")
+    if tok:
+        print(tok); break
+PY
+)"
+
+if [ -z "$TOKEN" ]; then
+  echo "No auth token in $CFG — run 'npx netlify-cli login' once, then retry." >&2
+  exit 1
+fi
+
+api() { curl -sS -H "Authorization: Bearer $TOKEN" "$@"; }
+
+echo "Resolving site '$SITE_NAME'…"
+SITE_ID="$(api "https://api.netlify.com/api/v1/sites?per_page=100" | python3 - "$SITE_NAME" <<'PY'
+import json, sys
+name = sys.argv[1]
+for s in json.load(sys.stdin):
+    if s.get("name") == name:
+        print(s["id"]); break
+PY
+)"
+
+if [ -z "$SITE_ID" ]; then
+  echo "Site '$SITE_NAME' not found on this account. Create it first, or set NETLIFY_SITE_NAME." >&2
+  exit 1
+fi
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+ZIP="$TMP/site.zip"
+
+echo "Packing…"
+# Ship only what the browser needs; .claude holds machine-local paths and .git is history.
+rsync -a --exclude '.git' --exclude '.claude' --exclude '.DS_Store' --exclude 'deploy.sh' \
+      "$HERE/" "$TMP/site/"
+( cd "$TMP/site" && zip -qr "$ZIP" . )
+echo "  $(du -h "$ZIP" | cut -f1)"
+
+echo "Deploying to $SITE_NAME…"
+DEPLOY_JSON="$(api -X POST -H "Content-Type: application/zip" \
+  --data-binary "@$ZIP" "https://api.netlify.com/api/v1/sites/$SITE_ID/deploys")"
+
+DEPLOY_ID="$(echo "$DEPLOY_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))')"
+if [ -z "$DEPLOY_ID" ]; then
+  echo "Deploy failed:" >&2
+  echo "$DEPLOY_JSON" >&2
+  exit 1
+fi
+
+printf 'Waiting for it to go live'
+for _ in $(seq 1 40); do
+  STATE="$(api "https://api.netlify.com/api/v1/deploys/$DEPLOY_ID" \
+           | python3 -c 'import sys,json; print(json.load(sys.stdin).get("state",""))')"
+  case "$STATE" in
+    ready) echo; echo "Live at https://$SITE_NAME.netlify.app"; exit 0 ;;
+    error) echo; echo "Deploy errored. See https://app.netlify.com/sites/$SITE_NAME/deploys" >&2; exit 1 ;;
+  esac
+  printf '.'
+  sleep 4
+done
+
+echo
+echo "Still processing after ~3 minutes. Check https://app.netlify.com/sites/$SITE_NAME/deploys" >&2
