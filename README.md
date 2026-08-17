@@ -126,6 +126,31 @@ Zips the site and posts it to Netlify. The auth token is read from the Netlify C
 your machine, so nothing secret lives in this repository. If you have never logged in here, run
 `npx netlify-cli login` once first.
 
+## Prepare on a laptop, view on the headset
+
+Everything lives in the browser it was prepared in, so a matter built on your Mac is not on your
+headset. Move it across like this, without any of it touching a cloud:
+
+```bash
+./share-matter.sh          # serves the newest saved matter over your own wifi
+```
+
+Press **Save** in the app first. The script prints a short URL. Then on the headset, in Quest Browser:
+
+1. open `http://<your-mac>:8777/m.txt` — downloads the matter
+2. open `https://chauhaddi.netlify.app` — the app itself, on a real certificate, so VR works
+3. tap **Open** and pick the file you just downloaded
+4. tap **ENTER VR**
+
+The app has to come from the live HTTPS URL rather than from your Mac, because WebXR needs a secure
+context and a self-signed LAN certificate makes that fragile. The *matter* comes from your Mac. So
+the geometry never leaves your network and the headset still gets a certificate it trusts.
+
+**If step 3 fails**, and it may — Quest Browser has a habit of accepting a file and then refusing the
+page its contents — open the same URL again, select all, copy, and paste it into **Export → Project
+text** instead. Same result, no file picker involved. That box also has a **Copy this matter** button
+for going the other way.
+
 ## Using it on a real matter
 
 1. **Provenance first.** Drop the source PDFs on the *Provenance* tab so they are hashed before anything
@@ -173,6 +198,8 @@ js/scene3d.js       three.js viewport, WebXR
 js/report.js        the discrepancy schedule
 js/store.js         project state, file hashing, s.63 certificate draft
 docs/evidence.md    how this gets into a record, and how it gets excluded
+deploy.sh           redeploy to Netlify
+share-matter.sh     hand a saved matter to a headset over your own wifi
 ```
 
 Dependencies are loaded from a CDN at runtime: three.js r169 and pdf.js 4.6. Nothing else.

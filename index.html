@@ -31,7 +31,7 @@
     <button id="btnOpen" title="Open a saved project file">Open</button>
     <button id="btnSave" title="Save the project as a .json file">Save</button>
     <button id="btnTheme" title="Switch light and dark">Theme</button>
-    <input id="fileOpen" type="file" accept="application/json,.json" hidden>
+    <input id="fileOpen" type="file" accept="application/json,.json,.txt,text/plain" hidden>
   </header>
 
   <!-- ------------------------------ left: layers ------------------------------ -->
@@ -380,6 +380,24 @@ Total admeasuring 1000 sq ft, Khasra No. 412/2"></textarea>
           <div class="field"><button id="btnPNG" style="width:100%">Download the view as PNG</button></div>
           <div class="checkline"><input id="incSnapshot" type="checkbox" checked>
             <label for="incSnapshot">Embed the current view in the schedule</label></div>
+        </section>
+
+        <section class="block">
+          <h3>Move this matter to another device</h3>
+          <p class="hint">Everything lives in this browser, so a matter prepared on your laptop is not
+            on your headset. <b>Save</b> writes a <span class="mono">.json</span> you can carry over and
+            <b>Open</b> reads it back. If a headset refuses to hand the file to the page, use the box
+            below instead: copy the text on one device, paste it on the other. Nothing goes near a
+            server either way.</p>
+          <div class="field">
+            <label class="lab" for="projectPaste">Project text</label>
+            <textarea id="projectPaste" rows="4" spellcheck="false"
+              placeholder="Paste a saved project here, or press Copy to put this one on the clipboard"></textarea>
+          </div>
+          <div class="row auto">
+            <button id="btnCopyProject">Copy this matter</button>
+            <button id="btnPasteProject" class="primary">Load pasted matter</button>
+          </div>
         </section>
 
         <section class="block">

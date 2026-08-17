@@ -118,7 +118,13 @@ function bindTopbar() {
     const f = e.target.files?.[0];
     if (!f) return;
     try {
-      project = migrate(JSON.parse(await f.text()));
+      const raw = await f.text();
+      if (!raw.trim()) {
+        toast(`${f.name} read as empty. Some headset browsers accept a file and then refuse the page its contents — paste the project text instead (Export tab).`, 9000);
+        e.target.value = '';
+        return;
+      }
+      project = migrate(JSON.parse(raw));
       selectedLayerId = project.layers[0]?.id || null;
       selectedStructureId = null;
       lastComparison = null; lastSunResult = null;
@@ -1121,6 +1127,37 @@ function bindExportPanel() {
 
   $('#btnPNG').addEventListener('click', () => {
     downloadBlob(`chauhaddi_view_${stamp()}.png`, dataUrlToBlob(vp.snapshotPNG()));
+  });
+
+  $('#btnCopyProject').addEventListener('click', async () => {
+    const text = JSON.stringify(project);
+    $('#projectPaste').value = text;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`Matter copied — ${(text.length / 1024).toFixed(1)} KB. Paste it into the same box on the other device.`, 6000);
+    } catch {
+      $('#projectPaste').select();
+      toast('Clipboard blocked by the browser. The text is selected in the box — copy it by hand.', 7000);
+    }
+  });
+
+  $('#btnPasteProject').addEventListener('click', () => {
+    const raw = $('#projectPaste').value.trim();
+    if (!raw) { toast('Nothing pasted.'); return; }
+    try {
+      project = migrate(JSON.parse(raw));
+      selectedLayerId = project.layers[0]?.id || null;
+      selectedStructureId = null;
+      lastComparison = null; lastSunResult = null;
+      hydrateFromProject();
+      renderAll();
+      frameAll();
+      $('#projectPaste').value = '';
+      toast(`Loaded “${project.matter.title || 'matter'}” — ${project.layers.length} outline(s).`, 5000);
+    } catch (err) {
+      toast('That is not a saved Chauhaddi matter. Paste the whole text, from the first { to the last }.', 7000);
+      console.warn(err);
+    }
   });
 
   $('#btnReset').addEventListener('click', () => {
