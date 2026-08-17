@@ -456,10 +456,12 @@ export class Viewport {
       this.inXR = true;
       this.player.rotation.y = 0;
       this.#applyVrScale();
+      this.#showXrHint();
       document.body.classList.add('in-xr');
     });
     this.renderer.xr.addEventListener('sessionend', () => {
       this.inXR = false;
+      if (this._xrHint) { this.player.remove(this._xrHint); this._xrHint = null; }
       this.player.position.set(0, 0, 0);
       this.player.rotation.y = 0;
       this.world.scale.setScalar(1);
@@ -467,6 +469,30 @@ export class Viewport {
       this.ground.visible = true;
       document.body.classList.remove('in-xr');
     });
+  }
+
+  /**
+   * A control hint that lives in the scene, because in an immersive session
+   * there is no DOM to put it in. Sits at eye height ahead of the player and
+   * fades after a few seconds so it does not clutter the picture.
+   */
+  #showXrHint() {
+    if (this._xrHint) { this.player.remove(this._xrHint); this._xrHint = null; }
+    const hint = makeLabel(
+      'left stick move  ·  right stick turn  ·  Y / B add a document (leaves VR)',
+      { size: 26, color: '#151a17', bg: 'rgba(236,238,234,0.94)' }, 0.09);
+    hint.position.set(0, -0.22, -1.1);
+    this.player.add(hint);
+    this._xrHint = hint;
+    const started = performance.now();
+    const fade = () => {
+      if (this._xrHint !== hint) return;
+      const t = (performance.now() - started) / 1000;
+      if (t > 9) { this.player.remove(hint); this._xrHint = null; return; }
+      hint.material.opacity = t > 6 ? Math.max(0, 1 - (t - 6) / 3) : 1;
+      requestAnimationFrame(fade);
+    };
+    requestAnimationFrame(fade);
   }
 
   /**
@@ -498,14 +524,25 @@ export class Viewport {
   #xrLocomotion(dt) {
     const session = this.renderer.xr.getSession?.();
     if (!session) return;
-    let moveX = 0, moveZ = 0, turn = 0;
+    let moveX = 0, moveZ = 0, turn = 0, upperFace = false;
     for (const src of session.inputSources) {
       const gp = src.gamepad;
-      if (!gp || gp.axes.length < 4) continue;
+      if (!gp) continue;
+      // Y on the left controller, B on the right. Nothing else in this app uses
+      // it, and it is hard to hit by accident while driving a thumbstick.
+      if (gp.buttons?.[5]?.pressed) upperFace = true;
+      if (gp.axes.length < 4) continue;
       const [, , ax, ay] = gp.axes;
       if (src.handedness === 'left') { moveX += dz(ax); moveZ += dz(ay); }
       else { turn += dz(ax); }
     }
+
+    // A file picker is 2D system UI and cannot be composited into an immersive
+    // session, so the only honest way to add a document from inside VR is to
+    // leave, pick it, and come back. Edge-triggered so a held button fires once.
+    if (upperFace && !this._upperFaceWas) this.onExitForFile?.();
+    this._upperFaceWas = upperFace;
+
     if (!moveX && !moveZ && !turn) return;
 
     const speed = 2.2 * this.vrScale * dt;   // walk faster when the world is bigger
@@ -537,6 +574,11 @@ export class Viewport {
     if (this.inXR) this.#xrLocomotion(dt);
     else this.controls.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** End the immersive session, if one is running. */
+  endXR() {
+    try { this.renderer.xr.getSession?.()?.end(); } catch { /* already gone */ }
   }
 
   snapshotPNG() {

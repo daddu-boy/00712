@@ -39,6 +39,7 @@ function toast(msg, ms = 2600) {
 function boot() {
   vp = new Viewport($('#canvas'));
   $('#stage').appendChild(vp.vrButton);
+  bindXrHandoff();
 
   applyStoredTheme();
   fillSelects();
@@ -186,6 +187,58 @@ function bindStage() {
   });
 }
 
+/* ---------------------- getting documents in, and VR ---------------------- *
+ *
+ * A file picker is 2D system UI. It cannot be composited into an immersive
+ * WebXR session, and the WebXR DOM Overlay module that would allow HTML during
+ * a session is an AR feature that Quest Browser does not offer for immersive
+ * VR. So there is no way to drop a PDF while wearing the headset, and pretending
+ * otherwise would just produce a dead button.
+ *
+ * What works instead: ingest in the flat page, then enter VR. And from inside
+ * VR, Y or B leaves the session, brings you back to this page with the drop
+ * zone waiting, and offers to put you straight back in once the outline exists.
+ */
+let wantReenterVR = false;
+
+function bindXrHandoff() {
+  vp.onExitForFile = () => {
+    wantReenterVR = true;
+    vp.endXR();
+    // Give the session a moment to tear down before moving the page around.
+    setTimeout(() => {
+      showTab('parse');
+      const dz = $('#dropDoc');
+      dz.classList.add('over');
+      dz.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      dz.focus();
+      setTimeout(() => dz.classList.remove('over'), 2200);
+      toast('Left VR so you can add a document — a file picker cannot open inside a headset. Build the outline, then tap ENTER VR again.', 7000);
+    }, 260);
+  };
+
+  // Entering VR with nothing loaded drops you into an empty grid, which reads
+  // as a broken app rather than an empty matter.
+  vp.vrButton.addEventListener('click', () => {
+    if (!project.layers.some(l => !l.hidden && l.polygon)) {
+      toast('Nothing to look at yet. Parse a schedule (or press Example) before entering VR.', 6000);
+    }
+  }, true);
+}
+
+function offerReenterVR() {
+  if (!wantReenterVR) return;
+  wantReenterVR = false;
+  toast('Outline added. Tap ENTER VR to go back in.', 6000);
+  vp.vrButton.classList.add('pulse');
+  setTimeout(() => vp.vrButton.classList.remove('pulse'), 6000);
+}
+
+function showTab(name) {
+  $$('#tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === name));
+  $$('.tabpanel').forEach(x => x.classList.toggle('on', x.dataset.tab === name));
+}
+
 const allPoints = () => project.layers.filter(l => !l.hidden && l.polygon).flatMap(l => l.polygon);
 function frameAll() {
   const p = allPoints();
@@ -225,6 +278,10 @@ function bindParsePanel() {
 
 async function handleDocFile(file) {
   const { record, buffer } = await recordFile(file, { role: 'source document' });
+  if (!buffer || buffer.byteLength === 0) {
+    toast(`${file.name} read as zero bytes. On Quest Browser this happens with some file extensions — the picker accepts the file but will not hand the bytes to the page. Paste the schedule text instead.`, 9000);
+    return;
+  }
   project.files.push(record);
   renderFiles();
   persist();
@@ -301,8 +358,7 @@ function doParse() {
     $('#newLayerName').value = id ? `${id.kind} ${id.value}` : 'Outline from schedule';
   }
   updateReconPreview();
-  $$('#tabs button').forEach(x => x.classList.remove('on'));
-  $('#tabs button[data-tab="parse"]').classList.add('on');
+  showTab('parse');
   toast(`${parsed.calls.length} boundary call${parsed.calls.length === 1 ? '' : 's'} found. Verify each one.`);
 }
 
@@ -433,6 +489,7 @@ function buildLayerFromParse() {
   frameAll();
   $('#newLayerName').value = '';
   toast(`“${layer.name}” added at tier ${layer.tier}.`);
+  offerReenterVR();
 }
 
 function addManualLayer() {
@@ -1253,10 +1310,7 @@ Total admeasuring 1000 sq ft, Khasra No. 412/2`;
   $('#cmpA').value = project.layers[0].id;
   $('#cmpB').value = project.layers[1].id;
   renderCompare();
-  $$('#tabs button').forEach(x => x.classList.remove('on'));
-  $$('.tabpanel').forEach(x => x.classList.remove('on'));
-  $('#tabs button[data-tab="compare"]').classList.add('on');
-  $('.tabpanel[data-tab="compare"]').classList.add('on');
+  showTab('compare');
 
   toast('Two deeds for one plot, 45 years apart. Look at what the north boundary did.', 6500);
 }

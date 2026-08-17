@@ -86,6 +86,36 @@ WebXR needs a secure context, so the VR mode works from the live HTTPS URL or fr
 **not** from a plain `http://` LAN address. The failure there is silent: no ENTER VR button and no
 error. Use the live URL on the headset.
 
+## Getting a document in, on a headset
+
+**You cannot drop a PDF while wearing the headset.** A file picker is 2D system UI, and an immersive
+WebXR session replaces the DOM entirely, so there is nothing for a picker to open into. The WebXR
+DOM Overlay module that would allow HTML during a session is an AR feature and Quest Browser does
+not offer it for immersive VR. This is a platform limit, not something this app can work around.
+
+So the order is: **ingest flat, then go in.**
+
+1. Open https://chauhaddi.netlify.app in Quest Browser. It starts as an ordinary 2D window.
+2. Drop the file or paste the schedule, parse it, verify the calls, add the outline.
+3. Tap **ENTER VR**.
+
+From inside VR, **Y** (left controller) or **B** (right) ends the session and returns you to this
+page with the ingest panel open and the drop zone highlighted. Add the outline, then tap ENTER VR
+again. That round trip is the closest thing to adding a document from inside VR, and it is
+deliberate rather than a workaround: the session has to end for the picker to exist at all.
+
+Two things worth knowing before you rely on the headset for ingest:
+
+- **Quest Browser will not always hand the bytes to the page.** It has a long-standing quirk where
+  `<input type="file">` accepts a file of certain extensions and then refuses JavaScript access to
+  its contents. If a file reads as zero bytes the app says so explicitly rather than failing
+  quietly. Paste the schedule text instead, which always works.
+- **Most registered Indian deeds are scans**, with no text layer to extract, so on a headset you
+  would be retyping into a virtual keyboard. Prepare the matter on a laptop, **Save** the project
+  JSON, and open it on the headset. Better still, treat VR as a viewer: it is for scale intuition,
+  client conferences, witness preparation and mediation, none of which need a document ingested
+  while you are wearing it.
+
 ## Deploying
 
 ```bash
