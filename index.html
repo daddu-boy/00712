@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chauhaddi — property geometry workbench</title>
+<meta name="description" content="Reconcile the geometry of Indian property documents. Runs entirely in your browser; nothing is uploaded.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📐</text></svg>">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ------------------------------ topbar ------------------------------ -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-mark">Chauhaddi</span>
+      <span class="brand-sub">property geometry</span>
+    </div>
+    <input id="matterTitle" class="matter-field" type="text" placeholder="Matter title" aria-label="Matter title">
+    <div class="topbar-spacer"></div>
+    <button id="btnSample" title="Load a worked example with a real discrepancy in it">Example</button>
+    <button id="btnOpen" title="Open a saved project file">Open</button>
+    <button id="btnSave" title="Save the project as a .json file">Save</button>
+    <button id="btnTheme" title="Switch light and dark">Theme</button>
+    <input id="fileOpen" type="file" accept="application/json,.json" hidden>
+  </header>
+
+  <!-- ------------------------------ left: layers ------------------------------ -->
+  <aside id="leftbar">
+    <div class="pane-head">
+      <h2>Outlines</h2>
+      <button id="btnAddManual" class="tiny" title="Add an outline by typing its corner coordinates">+ Coords</button>
+    </div>
+    <div class="pane-body">
+      <div id="layerList"></div>
+      <div class="callout" style="margin-top:12px">
+        <b>Every outline carries a tier.</b> Dashed on screen means inferred (C&nbsp;or&nbsp;D). Solid means it came from a
+        plan or an instrument survey. Never argue a boundary from a dashed line.
+      </div>
+    </div>
+
+    <div class="pane-head" style="border-top:1px solid var(--rule)">
+      <h2>Selected outline</h2>
+    </div>
+    <div class="pane-body" id="layerEditor"></div>
+  </aside>
+
+  <!-- ------------------------------ stage ------------------------------ -->
+  <main id="stage">
+    <canvas id="canvas"></canvas>
+
+    <div id="viewTools" class="stage-overlay">
+      <button data-view="iso" class="on">Iso</button>
+      <button data-view="plan">Plan</button>
+      <button data-view="north">North elev.</button>
+      <button data-view="eye">Eye level</button>
+      <button id="btnFrame">Fit</button>
+      <button id="btnLabels" class="on">Labels</button>
+      <button id="btnVrScale" title="Scale used when you enter VR">VR&nbsp;1:1</button>
+      <button id="btnSnap">Snapshot</button>
+    </div>
+
+    <div id="tierBanner" class="stage-overlay">
+      <b>Demonstrative only</b>
+      This is an illustration of evidence, not evidence of a boundary. No figure here is a survey.
+    </div>
+
+    <div id="tierLegend" class="stage-overlay"></div>
+  </main>
+
+  <!-- ------------------------------ right: work panels ------------------------------ -->
+  <aside id="rightbar">
+    <nav id="tabs">
+      <button data-tab="parse" class="on">Schedule</button>
+      <button data-tab="findings">Findings</button>
+      <button data-tab="compare">Compare</button>
+      <button data-tab="build">Building</button>
+      <button data-tab="sun">Light &amp; air</button>
+      <button data-tab="files">Provenance</button>
+      <button data-tab="export">Export</button>
+    </nav>
+
+    <div id="tabpanels">
+
+      <!-- ---------- schedule ---------- -->
+      <div class="tabpanel on" data-tab="parse">
+        <section class="block">
+          <h3>1 · Bring in the schedule</h3>
+          <div id="dropDoc" class="dropzone" tabindex="0" role="button">
+            Drop a deed, commissioner&rsquo;s report or extract here<br>
+            <span style="font-size:11.5px">PDF or .txt &nbsp;·&nbsp; read in this browser, never uploaded</span>
+          </div>
+          <input id="fileDoc" type="file" accept="application/pdf,.pdf,text/plain,.txt" hidden>
+          <p class="hint">A scanned PDF has no text layer, so nothing will be extracted from it. Photograph or retype the
+            Schedule of Property in that case &mdash; and note that most registered deeds in India are scans.</p>
+        </section>
+
+        <section class="block">
+          <h3>2 · Schedule of Property</h3>
+          <div class="field">
+            <label class="lab" for="scheduleText">Paste or edit the boundary recital</label>
+            <textarea id="scheduleText" rows="9" spellcheck="false" placeholder="North : 40 feet, adjoining property of Ram Lal
+East  : 25 ft, adjoining 20 ft wide municipal road
+South : 36'-9&quot;, adjoining property of Sita Devi
+West  : 25 feet, adjoining common passage
+Total admeasuring 1000 sq ft, Khasra No. 412/2"></textarea>
+          </div>
+          <div class="row auto">
+            <button id="btnParse" class="primary">Parse schedule</button>
+            <button id="btnClearParse">Clear</button>
+          </div>
+          <p class="hint">One boundary per line reads most reliably, but a single run-on paragraph is handled too.
+            Hindi, Marathi and southern-language transliterations of the direction words are recognised.</p>
+        </section>
+
+        <section class="block" id="verifyBlock" hidden>
+          <h3>3 · Verify every call against the source</h3>
+          <p class="hint">Nothing is trusted until you confirm it. The quoted line sits under each row so you can check
+            the number against the words without leaving this screen.</p>
+          <div id="callList"></div>
+          <div class="row" style="margin-top:10px">
+            <div class="field" style="margin:0">
+              <label class="lab" for="statedArea">Area stated in the document</label>
+              <div class="row tight">
+                <input id="statedArea" type="number" step="any" placeholder="1000">
+                <select id="statedAreaUnit" style="max-width:118px"></select>
+              </div>
+            </div>
+          </div>
+          <div id="parseWarnings"></div>
+        </section>
+
+        <section class="block" id="buildBlock" hidden>
+          <h3>4 · Reconstruct</h3>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="reconMode">Reading</label>
+              <select id="reconMode">
+                <option value="chauhaddi">Chauhaddi — each call is the length of that side</option>
+                <option value="traverse">Traverse — each call is a leg to be walked</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="newLayerName">Name this outline</label>
+              <input id="newLayerName" type="text" placeholder="Sale deed, 1974">
+            </div>
+            <div class="field" style="margin:0;max-width:104px">
+              <label class="lab" for="newLayerTier">Tier</label>
+              <select id="newLayerTier"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="newLayerAsOf">As at (date of the document)</label>
+              <input id="newLayerAsOf" type="text" placeholder="1974-03-12 or &ldquo;1974&rdquo;">
+            </div>
+          </div>
+          <button id="btnBuildLayer" class="primary" style="width:100%">Add outline to the matter</button>
+          <p class="hint" id="reconPreview"></p>
+        </section>
+      </div>
+
+      <!-- ---------- findings ---------- -->
+      <div class="tabpanel" data-tab="findings">
+        <section class="block">
+          <h3>Internal contradictions</h3>
+          <p class="hint">Each finding below is a place where a document disagrees with itself. None of them depends on a
+            survey, which is what makes them the cheapest findings available to you.</p>
+        </section>
+        <div class="pane-body" id="findingsList"></div>
+      </div>
+
+      <!-- ---------- compare ---------- -->
+      <div class="tabpanel" data-tab="compare">
+        <section class="block">
+          <h3>Compare two outlines</h3>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="cmpA">Outline A — the reference</label>
+              <select id="cmpA"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="cmpB">Outline B — compared against A</label>
+              <select id="cmpB"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="cmpAlign">Alignment</label>
+              <select id="cmpAlign">
+                <option value="none" selected>Stored coordinates, as they are</option>
+                <option value="centroid">Centre on one another (area centroid)</option>
+                <option value="corner">Pin a shared corner</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;max-width:78px">
+              <label class="lab" for="cmpCorner">Corner</label>
+              <select id="cmpCorner">
+                <option>SW</option><option>SE</option><option>NW</option><option>NE</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint warn">Alignment is a choice, and it changes the overlap &mdash; try switching it and watch the
+            figure move. Whichever you use must be stated whenever these figures are relied on. Two reconstructions built
+            here already share an origin, so <b>stored coordinates</b> is the honest default; a survey with its own grid
+            needs a deliberate alignment.</p>
+        </section>
+        <div class="pane-body" id="compareOut"></div>
+      </div>
+
+      <!-- ---------- building ---------- -->
+      <div class="tabpanel" data-tab="build">
+        <section class="block">
+          <h3>Structures and allotment</h3>
+          <p class="hint">A stack of floors on a footprint. This is what carries a partition of a multi-storey house, the
+            floor-sharing in a development agreement, or the mass that obstructs a neighbour&rsquo;s light.</p>
+          <div class="row auto" style="margin-top:8px">
+            <button id="btnAddStructure">+ Structure</button>
+          </div>
+        </section>
+        <div class="pane-body" id="structureList"></div>
+      </div>
+
+      <!-- ---------- sun ---------- -->
+      <div class="tabpanel" data-tab="sun">
+        <section class="block">
+          <h3>Site</h3>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="cityPreset">Nearest city</label>
+              <select id="cityPreset"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="siteLat">Latitude °N</label>
+              <input id="siteLat" type="number" step="any">
+            </div>
+            <div class="field" style="margin:0">
+              <label class="lab" for="siteLon">Longitude °E</label>
+              <input id="siteLon" type="number" step="any">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="northOffset">North offset of the drawing (° clockwise)</label>
+              <input id="northOffset" type="number" step="any" value="0">
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <h3>Time of day</h3>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="sunDate">Date</label>
+              <input id="sunDate" type="date">
+            </div>
+          </div>
+          <div class="field">
+            <label class="lab" for="sunTime">Time (IST) — <span id="sunTimeLabel">12:00 pm</span></label>
+            <input id="sunTime" type="range" min="0" max="1439" step="5" value="720">
+          </div>
+          <dl class="kv" id="sunReadout"></dl>
+          <div class="row auto" style="margin-top:8px">
+            <button data-keydate="winter">21 Dec</button>
+            <button data-keydate="equinox">21 Mar</button>
+            <button data-keydate="summer">21 Jun</button>
+          </div>
+        </section>
+
+        <section class="block">
+          <h3>Direct sunlight at an opening</h3>
+          <p class="hint">Section 15 of the Easements Act 1882 gives an absolute right to light and air after twenty
+            years&rsquo; peaceable enjoyment, and the suit must be brought within two years of the obstruction. Whether
+            there is interference at all is arithmetic &mdash; below.</p>
+          <div class="row" style="margin-top:8px">
+            <div class="field" style="margin:0">
+              <label class="lab" for="winFacing">Opening faces</label>
+              <select id="winFacing">
+                <option>North</option><option selected>East</option><option>South</option><option>West</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0">
+              <label class="lab" for="winHeight">Height above ground (ft)</label>
+              <input id="winHeight" type="number" step="any" value="4">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0">
+              <label class="lab" for="winStructure">On which structure</label>
+              <select id="winStructure"></select>
+            </div>
+          </div>
+          <button id="btnSunStudy" class="primary" style="width:100%;margin-top:4px">Run the study</button>
+          <p class="hint">Mark the neighbour&rsquo;s building as an <b>obstruction</b> on the Building tab first, or there
+            is nothing to block the light and every figure will come back unchanged.</p>
+          <div id="sunStudyOut"></div>
+        </section>
+      </div>
+
+      <!-- ---------- provenance ---------- -->
+      <div class="tabpanel" data-tab="files">
+        <section class="block">
+          <h3>Source records</h3>
+          <p class="hint">Every file is hashed with SHA-256 the moment it is read. Section 63(4) of the Bharatiya Sakshya
+            Adhiniyam 2023 requires the certificate accompanying an electronic record to state its hash value and to be
+            signed by both the person in charge of the device and an expert. Provenance cannot be added later, so it is
+            recorded from the first click.</p>
+          <div id="dropAny" class="dropzone" tabindex="0" role="button" style="margin-top:10px">
+            Drop any file to record its hash
+          </div>
+          <input id="fileAny" type="file" hidden multiple>
+        </section>
+        <div class="pane-body" id="fileList"></div>
+
+        <section class="block">
+          <h3>Underlay — a plan or FMB sketch to trace over</h3>
+          <p class="hint">Fit it by hand against a boundary you trust. A scanned FMB warps, so the fit will never be
+            perfect; that residual is itself worth recording.</p>
+          <div id="dropImg" class="dropzone" tabindex="0" role="button" style="margin-top:10px">
+            Drop a PNG or JPG
+          </div>
+          <input id="fileImg" type="file" accept="image/*" hidden>
+          <div id="underlayControls" hidden>
+            <div class="field"><label class="lab">Width across the image (ft) — <span id="ulWLabel"></span></label>
+              <input id="ulWidth" type="range" min="2" max="600" step="0.5"></div>
+            <div class="field"><label class="lab">Rotate (°) — <span id="ulRLabel"></span></label>
+              <input id="ulRot" type="range" min="-180" max="180" step="0.5"></div>
+            <div class="row">
+              <div class="field" style="margin:0"><label class="lab">East offset (ft)</label>
+                <input id="ulDx" type="number" step="any" value="0"></div>
+              <div class="field" style="margin:0"><label class="lab">North offset (ft)</label>
+                <input id="ulDy" type="number" step="any" value="0"></div>
+            </div>
+            <div class="field"><label class="lab">Opacity — <span id="ulOLabel"></span></label>
+              <input id="ulOpacity" type="range" min="0.05" max="1" step="0.05" value="0.6"></div>
+            <button id="btnRemoveUnderlay" class="danger tiny">Remove underlay</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- ---------- export ---------- -->
+      <div class="tabpanel" data-tab="export">
+        <section class="block">
+          <h3>Matter details for the header</h3>
+          <div class="field"><label class="lab" for="mCourt">Court</label><input id="mCourt" type="text"></div>
+          <div class="field"><label class="lab" for="mSuit">Suit / case no.</label><input id="mSuit" type="text"></div>
+          <div class="field"><label class="lab" for="mParties">Parties</label><input id="mParties" type="text"></div>
+          <div class="field"><label class="lab" for="mBy">Prepared by</label><input id="mBy" type="text"></div>
+        </section>
+
+        <section class="block">
+          <h3>Outputs</h3>
+          <div class="callout">
+            <b>The discrepancy schedule is the deliverable.</b> The 3D view exists to explain it. Open the schedule and
+            print to PDF &mdash; that is what goes in the file.
+          </div>
+          <div class="field"><button id="btnReport" class="primary" style="width:100%">Open discrepancy schedule</button></div>
+          <div class="field"><button id="btnCSV" style="width:100%">Download figures as CSV</button></div>
+          <div class="field"><button id="btnManifest" style="width:100%">Download provenance manifest (JSON)</button></div>
+          <div class="field"><button id="btnCert" style="width:100%">Download s.63 certificate draft</button></div>
+          <div class="field"><button id="btnPNG" style="width:100%">Download the view as PNG</button></div>
+          <div class="checkline"><input id="incSnapshot" type="checkbox" checked>
+            <label for="incSnapshot">Embed the current view in the schedule</label></div>
+        </section>
+
+        <section class="block">
+          <h3>Reset</h3>
+          <button id="btnReset" class="danger" style="width:100%">Discard this matter and start over</button>
+          <p class="hint">Everything lives in this browser only. Clearing site data, or using a different browser or
+            machine, loses it. Save the .json if the work matters.</p>
+        </section>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ------------------------------ status ------------------------------ -->
+  <footer id="statusbar">
+    <span id="stTier">no outlines</span>
+    <span>·</span>
+    <span id="stArea">—</span>
+    <span>·</span>
+    <span id="stFiles">0 source files</span>
+    <span>·</span>
+    <span id="stSaved">not saved</span>
+    <span>·</span>
+    <span>runs entirely in your browser — nothing is uploaded</span>
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<noscript>
+  <div style="padding:40px;font-family:Georgia,serif;max-width:60ch;margin:0 auto">
+    <h1>Chauhaddi</h1>
+    <p>This tool computes geometry in the browser, so it needs JavaScript enabled. Nothing is sent anywhere;
+    the computation has to happen locally precisely because the documents are privileged.</p>
+  </div>
+</noscript>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
