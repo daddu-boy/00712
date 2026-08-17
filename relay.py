@@ -194,7 +194,7 @@ def main():
   Advanced, then proceed. It is your own Mac, and it is the reason VR works.
 
   Ctrl-C to stop the relay and erase the matter from memory.
-""")
+""", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
