@@ -256,6 +256,9 @@ section.block > h3 {
 #tierLegend .sw { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 6px; }
 
 .banner-x {
+  /* The banner itself stays click-through so the scene can be dragged behind it,
+     which means the button has to re-enable hit-testing for itself. */
+  pointer-events: auto;
   position: absolute; top: 3px; right: 4px;
   border: none; background: none; padding: 2px 5px;
   font-family: var(--mono); font-size: 15px; line-height: 1;
