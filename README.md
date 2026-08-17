@@ -151,6 +151,35 @@ page its contents — open the same URL again, select all, copy, and paste it in
 text** instead. Same result, no file picker involved. That box also has a **Copy this matter** button
 for going the other way.
 
+## Show it to the room, live
+
+Anyone on your wifi can watch the matter you have open, for as long as you hold the broadcast on.
+
+```bash
+./relay.py
+```
+
+It prints two addresses. Open the first on this Mac and the second on every other device
+(laptops, phones, a Quest). Prepare the matter, then press **Broadcast** in the top bar. Press it
+again to stop, and it vanishes from their screens.
+
+Nothing leaves your network. The matter is held in the relay process's memory only: never written to
+disk, never sent anywhere, gone when you quit.
+
+**The Play control only exists on this Mac**, and not because of a password. The relay can see where
+each request came from: `127.0.0.1` is you, anything else is a viewer, and the write endpoints refuse
+viewers outright. There is no secret to leak because there is no secret.
+
+**What travels is the matter, not your screen.** Viewers get the same outlines, findings and selected
+outline, and look wherever they like — including in VR. Mirroring one person's camera into someone
+else's headset is how you make them ill, so it does not do that.
+
+Every device will warn about the certificate the first time, because it is self-signed. Accept it
+once per device (Advanced, then proceed). That step is also what makes VR work at all: WebXR needs a
+secure context, so a plain `http://` address would silently offer no ENTER VR button. VR from a
+self-signed certificate is expected to work and is the same route Situation Room uses, but it is
+**not yet confirmed on a Quest** — that is the one thing left to test.
+
 ## Using it on a real matter
 
 1. **Provenance first.** Drop the source PDFs on the *Provenance* tab so they are hashed before anything
@@ -200,6 +229,8 @@ js/store.js         project state, file hashing, s.63 certificate draft
 docs/evidence.md    how this gets into a record, and how it gets excluded
 deploy.sh           redeploy to Netlify
 share-matter.sh     hand a saved matter to a headset over your own wifi
+relay.py            broadcast the open matter to everyone on your wifi
+js/relay.js         the client half; inert unless served by relay.py
 ```
 
 Dependencies are loaded from a CDN at runtime: three.js r169 and pdf.js 4.6. Nothing else.

@@ -373,6 +373,33 @@ table.grid input, table.grid select { font-size: 11px; padding: 2px 5px; }
 .stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px; margin: 4px 0 10px; }
 .stat { border: 1px solid var(--rule-2); border-radius: var(--radius); padding: 8px 9px; background: var(--paper); }
 
+#watchBanner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  padding: 7px 14px; font-size: 12px; line-height: 1.4;
+  border-bottom: 1px solid var(--rule); text-align: center;
+}
+#watchBanner b {
+  font-family: var(--cond); text-transform: uppercase; letter-spacing: .13em;
+  font-size: 10px; margin-right: 9px; padding: 1px 7px 2px;
+  border: 1px solid; border-radius: 2px;
+}
+#watchBanner.live { background: var(--green-soft); color: var(--ink-2); }
+#watchBanner.live b { color: var(--green); border-color: var(--green); }
+#watchBanner.waiting { background: var(--panel-2); color: var(--ink-3); }
+#watchBanner.waiting b { color: var(--ink-3); border-color: var(--rule); }
+#watchBanner.lost { background: var(--brick-soft); color: var(--brick); }
+#watchBanner.lost b { color: var(--brick); border-color: var(--brick); }
+body:has(#watchBanner) #app { padding-top: 32px; }
+
+@keyframes livepulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(163,58,44,0); }
+  50%      { box-shadow: 0 0 0 6px rgba(163,58,44,.30); }
+}
+#btnBroadcast.live {
+  background: var(--brick) !important; border-color: var(--brick) !important;
+  color: #fff !important; animation: livepulse 1.5s ease-in-out infinite;
+}
+
 #toast {
   position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%) translateY(14px);
   background: var(--ink); color: var(--paper); padding: 8px 15px; border-radius: var(--radius);

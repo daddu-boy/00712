@@ -8,6 +8,7 @@ import { AREA_UNITS, FT, toSqMetres, m2ft, fmtFtIn, fmtSqFt, fmtPct } from './un
 import { emptyProject, migrate, saveLocal, loadLocal, clearLocal, recordFile, uid, downloadBlob,
          buildManifest, s63CertificateDraft, TIERS } from './store.js';
 import { compareLayers, buildReportHTML, buildCSV } from './report.js';
+import { Relay } from './relay.js';
 import { solarPosition, istDate, sunriseSunset, daySamples, KEY_DATES, CITY_PRESETS,
          fmtClock, fmtDuration } from './sun.js';
 
@@ -20,6 +21,7 @@ let selectedStructureId = null;
 let lastComparison = null;
 let lastSunResult = null;
 let vp = null;
+let relay = null;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -59,6 +61,28 @@ function boot() {
 
   hydrateFromProject();
   renderAll();
+
+  // Inert unless this page came from relay.py — see js/relay.js.
+  let framedFromBroadcast = false;
+  relay = new Relay({
+    getProject: () => project,
+    getSelected: () => selectedLayerId,
+    applyState: (incoming, selId) => {
+      project = migrate(incoming);
+      selectedLayerId = selId && project.layers.some(l => l.id === selId)
+        ? selId : (project.layers[0]?.id || null);
+      selectedStructureId = null;
+      lastComparison = null; lastSunResult = null;
+      hydrateFromProject();
+      renderAll();
+      // Frame the site on the first broadcast received, then leave the camera
+      // alone: a viewer looking at one corner should not be yanked back every
+      // time the host nudges something.
+      if (!framedFromBroadcast) { frameAll(); framedFromBroadcast = true; }
+    },
+    toast,
+  });
+  relay.init();
 
   if (!project.layers.length) toast('Press “Example” for a worked matter with a real discrepancy in it.', 5200);
 }
@@ -155,6 +179,7 @@ function hydrateFromProject() {
 }
 
 function persist() {
+  relay?.schedulePush();
   const ok = saveLocal(project);
   $('#stSaved').textContent = ok ? `held in this browser · ${new Date().toLocaleTimeString('en-IN')}` : 'too large for browser storage — use Save';
 }
@@ -553,7 +578,11 @@ function renderLayerList() {
     ].filter(Boolean);
     item.append(el('div', 'lmeta', esc(bits.join('  ·  '))));
 
-    item.addEventListener('click', () => { selectedLayerId = l.id; renderAll(); });
+    item.addEventListener('click', () => {
+      selectedLayerId = l.id;
+      renderAll();
+      relay?.schedulePush();
+    });
     host.append(item);
   });
 }
