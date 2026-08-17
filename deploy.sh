@@ -40,24 +40,31 @@ fi
 
 api() { curl -sS -H "Authorization: Bearer $TOKEN" "$@"; }
 
-echo "Resolving site '$SITE_NAME'…"
-SITE_ID="$(api "https://api.netlify.com/api/v1/sites?per_page=100" | python3 - "$SITE_NAME" <<'PY'
-import json, sys
-name = sys.argv[1]
-for s in json.load(sys.stdin):
-    if s.get("name") == name:
-        print(s["id"]); break
-PY
-)"
-
-if [ -z "$SITE_ID" ]; then
-  echo "Site '$SITE_NAME' not found on this account. Create it first, or set NETLIFY_SITE_NAME." >&2
-  exit 1
-fi
-
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 ZIP="$TMP/site.zip"
+
+# Responses go through a file rather than a pipe: a heredoc cannot both supply
+# the Python program on stdin and carry piped JSON on the same stdin.
+pyf() { python3 -c "$1" "$2"; }
+
+echo "Resolving site '$SITE_NAME'…"
+api "https://api.netlify.com/api/v1/sites?per_page=100" > "$TMP/sites.json"
+SITE_ID="$(pyf '
+import json, sys
+name = "'"$SITE_NAME"'"
+data = json.load(open(sys.argv[1]))
+if isinstance(data, dict):
+    sys.exit("Netlify API error: " + str(data.get("message") or data)[:200])
+for s in data:
+    if s.get("name") == name:
+        print(s["id"]); break
+' "$TMP/sites.json")"
+
+if [ -z "$SITE_ID" ]; then
+  echo "Site '$SITE_NAME' not found on this account. Create it in the Netlify UI, or set NETLIFY_SITE_NAME." >&2
+  exit 1
+fi
 
 echo "Packing…"
 # Ship only what the browser needs; .claude holds machine-local paths and .git is history.
@@ -67,20 +74,20 @@ rsync -a --exclude '.git' --exclude '.claude' --exclude '.DS_Store' --exclude 'd
 echo "  $(du -h "$ZIP" | cut -f1)"
 
 echo "Deploying to $SITE_NAME…"
-DEPLOY_JSON="$(api -X POST -H "Content-Type: application/zip" \
-  --data-binary "@$ZIP" "https://api.netlify.com/api/v1/sites/$SITE_ID/deploys")"
+api -X POST -H "Content-Type: application/zip" \
+    --data-binary "@$ZIP" "https://api.netlify.com/api/v1/sites/$SITE_ID/deploys" > "$TMP/deploy.json"
 
-DEPLOY_ID="$(echo "$DEPLOY_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))')"
+DEPLOY_ID="$(pyf 'import json,sys; print(json.load(open(sys.argv[1])).get("id",""))' "$TMP/deploy.json")"
 if [ -z "$DEPLOY_ID" ]; then
   echo "Deploy failed:" >&2
-  echo "$DEPLOY_JSON" >&2
+  cat "$TMP/deploy.json" >&2
   exit 1
 fi
 
 printf 'Waiting for it to go live'
 for _ in $(seq 1 40); do
-  STATE="$(api "https://api.netlify.com/api/v1/deploys/$DEPLOY_ID" \
-           | python3 -c 'import sys,json; print(json.load(sys.stdin).get("state",""))')"
+  api "https://api.netlify.com/api/v1/deploys/$DEPLOY_ID" > "$TMP/state.json"
+  STATE="$(pyf 'import json,sys; print(json.load(open(sys.argv[1])).get("state",""))' "$TMP/state.json")"
   case "$STATE" in
     ready) echo; echo "Live at https://$SITE_NAME.netlify.app"; exit 0 ;;
     error) echo; echo "Deploy errored. See https://app.netlify.com/sites/$SITE_NAME/deploys" >&2; exit 1 ;;
