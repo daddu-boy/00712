@@ -87,6 +87,7 @@ export class Viewport {
 
     this.raycaster = new THREE.Raycaster();
     this.showLabels = true;
+    this.labelMode = 'selected';   // 'selected' | 'all' | 'off'
     this.labelScale = 1;       // set from the content extent — see setContentScale
     this.vrScale = 1;          // 1 = walk it at full size; 50 = tabletop model
     this.xrControllers = [];
@@ -215,7 +216,7 @@ export class Viewport {
         });
       }
 
-      if (this.showLabels) this.#addEdgeLabels(pts, y, color, isSel, layer, i);
+      if (this.labelMode !== 'off') this.#addEdgeLabels(pts, y, color, isSel, layer, i);
     });
   }
 
@@ -223,28 +224,37 @@ export class Viewport {
     const hex = '#' + new THREE.Color(color).getHexString();
     const s = this.labelScale;
     const c = centroid(pts);
-    // Only the selected outline gets every edge dimensioned; otherwise four
-    // overlapping outlines produce sixteen colliding labels.
+    const b = bbox(pts);
+
+    // Dimensions belong to the outline you are working on. Four overlapping
+    // outlines dimensioned at once is sixteen labels fighting over the same
+    // few metres of screen.
     if (isSel) {
       for (let i = 0; i < pts.length; i++) {
-        const a = pts[i], b = pts[(i + 1) % pts.length];
-        const len = dist(a, b);
+        const a = pts[i], q = pts[(i + 1) % pts.length];
+        const len = dist(a, q);
         if (len < 0.4) continue;
-        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        // nudge the label outward, away from the centroid
+        const mid = { x: (a.x + q.x) / 2, y: (a.y + q.y) / 2 };
+        // push the label clear of the boundary, away from the centroid
         const ox = mid.x - c.x, oy = mid.y - c.y;
         const on = Math.hypot(ox, oy) || 1;
-        const off = s * 1.9;
+        const off = s * 2.6;
         const pos = { x: mid.x + (ox / on) * off, y: mid.y + (oy / on) * off };
         const sprite = makeLabel(fmtFtIn(len), { size: 30, color: hex, bg: 'rgba(236,238,234,0.86)' }, 1.0 * s);
-        sprite.position.copy(P(pos, y + 0.6 * s));
+        sprite.position.copy(P(pos, y + 0.35 * s));
         this.labelGroup.add(sprite);
       }
     }
-    const nm = makeLabel(`${layer.name} · ${layer.tier}`, { size: 30, color: hex, bg: 'rgba(236,238,234,0.9)', bold: true }, 1.15 * s);
-    // stagger vertically so stacked outlines do not print on top of one another
-    nm.position.copy(P(c, y + s * (2.0 + index * 1.9)));
-    this.labelGroup.add(nm);
+
+    // Name only the selected outline, and put the name outside the plot rather
+    // than over the middle of it, where the building and every other label sit.
+    // The sidebar already names all of them with their tiers.
+    if (this.labelMode === 'all' || isSel) {
+      const nm = makeLabel(`${layer.name} · ${layer.tier}`,
+        { size: 30, color: hex, bg: 'rgba(236,238,234,0.9)', bold: true }, 1.15 * s);
+      nm.position.copy(P({ x: c.x, y: b.minY - s * (4.2 + index * 2.2) }, y + 0.4 * s));
+      this.labelGroup.add(nm);
+    }
   }
 
   /** Shade the area two outlines disagree about. */
@@ -267,9 +277,13 @@ export class Viewport {
     ));
 
     if (label) {
-      const s = makeLabel(label, { size: 34, color: '#a33a2c', bg: 'rgba(239,223,219,0.94)', bold: true }, 1.5 * this.labelScale);
-      s.position.copy(P(centroid(intersectionPoly), 1.3 * this.labelScale));
-      this.disputeGroup.add(s);
+      const db = bbox(intersectionPoly);
+      const lab = makeLabel(label, { size: 34, color: '#a33a2c', bg: 'rgba(239,223,219,0.94)', bold: true }, 1.4 * this.labelScale);
+      lab.position.copy(P(
+        { x: db.minX - this.labelScale * 5.5, y: (db.minY + db.maxY) / 2 },
+        0.9 * this.labelScale,
+      ));
+      this.disputeGroup.add(lab);
     }
   }
 
@@ -319,21 +333,32 @@ export class Viewport {
         );
         this.structureGroup.add(edges);
 
-        if (this.showLabels && (fl.name || fl.allottedTo)) {
+        // Floor labels sit off the east face at each floor's mid-height, so they
+        // read like a section annotation instead of hovering inside the mass.
+        // Always shown unless labels are off: in a partition, who holds which
+        // floor is the entire question. An obstruction's internal floors are not
+        // the question, so it gets no per-floor labels — only its overall mass.
+        if (this.labelMode !== 'off' && !st.isObstruction && (fl.name || fl.allottedTo)) {
           const txt = [fl.name, fl.allottedTo ? `→ ${fl.allottedTo}` : null].filter(Boolean).join('   ');
-          const c = centroid(st.footprint);
-          const s = makeLabel(txt, { size: 28, color: '#151a17', bg: 'rgba(236,238,234,0.9)' }, 1.15 * this.labelScale);
-          s.position.copy(P(c, base + h / 2));
-          this.structureGroup.add(s);
+          const fb = bbox(st.footprint);
+          const lab = makeLabel(txt, { size: 28, color: '#151a17', bg: 'rgba(236,238,234,0.9)' }, 1.05 * this.labelScale);
+          // Offset by half the label's own width so the whole of it clears the
+          // wall. Guessing a fixed distance left long names half-buried, because
+          // a sprite is centred on its position and these vary a lot in width.
+          lab.position.copy(P(
+            { x: fb.maxX + lab.scale.x / 2 + this.labelScale * 1.1, y: (fb.minY + fb.maxY) / 2 },
+            base + h / 2,
+          ));
+          this.structureGroup.add(lab);
         }
         base += h;
       });
 
-      if (st.isObstruction) {
+      if (st.isObstruction && this.labelMode !== 'off') {
         const c = centroid(st.footprint);
-        const s = makeLabel(`${st.name} (obstruction)`, { size: 28, color: '#a33a2c', bg: 'rgba(239,223,219,0.92)', bold: true }, 1.3 * this.labelScale);
-        s.position.copy(P(c, base + 1.6 * this.labelScale));
-        this.structureGroup.add(s);
+        const lab = makeLabel(`${st.name} (obstruction)`, { size: 28, color: '#a33a2c', bg: 'rgba(239,223,219,0.92)', bold: true }, 1.3 * this.labelScale);
+        lab.position.copy(P(c, base + 2.2 * this.labelScale));
+        this.structureGroup.add(lab);
       }
     });
   }
@@ -641,7 +666,12 @@ function makeLabel(text, { size = 32, color = '#151a17', bg = null, bold = false
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  // depthTest stays ON so a label behind a wall is hidden by the wall. With it
+  // off, every label in the scene printed over every solid, which is what made
+  // the picture look like a pile of floating stickers.
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthTest: true, depthWrite: false,
+  }));
   sprite.scale.set((w / h) * worldHeight, worldHeight, 1);
   sprite.renderOrder = 10;
   return sprite;

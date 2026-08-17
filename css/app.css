@@ -255,10 +255,26 @@ section.block > h3 {
 #tierLegend .k { display: inline-block; width: 22px; color: var(--ink-3); }
 #tierLegend .sw { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 6px; }
 
+.banner-x {
+  position: absolute; top: 3px; right: 4px;
+  border: none; background: none; padding: 2px 5px;
+  font-family: var(--mono); font-size: 15px; line-height: 1;
+  color: var(--brick); opacity: .55; cursor: pointer; border-radius: 2px;
+}
+.banner-x:hover { opacity: 1; background: color-mix(in srgb, var(--brick) 14%, transparent); color: var(--brick); }
+
+#tierChip {
+  top: 10px; right: 10px; pointer-events: auto;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--brick); color: var(--brick);
+  backdrop-filter: blur(4px); opacity: .8;
+}
+#tierChip:hover { opacity: 1; color: var(--brick); border-color: var(--brick); }
+
 #tierBanner {
   top: 10px; right: 10px; max-width: 300px;
   background: var(--brick-soft); border: 1px solid var(--brick); border-radius: var(--radius);
-  padding: 8px 11px; font-size: 11px; line-height: 1.45; color: var(--brick);
+  padding: 8px 26px 9px 11px; font-size: 11px; line-height: 1.45; color: var(--brick);
 }
 #tierBanner b { display: block; font-family: var(--cond); text-transform: uppercase;
                 letter-spacing: .11em; font-size: 9.5px; margin-bottom: 3px; }

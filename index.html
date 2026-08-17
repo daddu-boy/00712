@@ -64,15 +64,19 @@
       <button data-view="north">North elev.</button>
       <button data-view="eye">Eye level</button>
       <button id="btnFrame">Fit</button>
-      <button id="btnLabels" class="on">Labels</button>
+      <button id="btnLabels" class="on" title="Dimension and name only the outline you have selected">Labels: selected</button>
       <button id="btnVrScale" title="Scale used when you enter VR">VR&nbsp;1:1</button>
       <button id="btnSnap">Snapshot</button>
     </div>
 
     <div id="tierBanner" class="stage-overlay">
-      <b>Demonstrative only</b>
-      This is an illustration of evidence, not evidence of a boundary. No figure here is a survey.
+      <button id="btnDismissBanner" class="banner-x" title="Hide this. The warning still prints on every export." aria-label="Hide the notice">&times;</button>
+      <div id="tierBannerText">
+        <b>Demonstrative only</b>
+        This is an illustration of evidence, not evidence of a boundary. No figure here is a survey.
+      </div>
     </div>
+    <button id="tierChip" class="stage-overlay" hidden title="Show the demonstrative-only notice again">Demonstrative</button>
 
     <div id="tierLegend" class="stage-overlay"></div>
   </main>

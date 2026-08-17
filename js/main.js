@@ -54,6 +54,7 @@ function boot() {
   bindSunPanel();
   bindFilesPanel();
   bindExportPanel();
+  bindTierBanner();
 
   // Sensible defaults for the sun panel before anything is loaded.
   const d = new Date();
@@ -195,9 +196,21 @@ function bindStage() {
 
   $('#btnFrame').addEventListener('click', frameAll);
 
+  // Three states rather than two: dimensioning every outline at once is what
+  // made the picture unreadable, so "selected only" is the default.
+  const LABEL_MODES = [
+    { key: 'selected', text: 'Labels: selected', title: 'Dimension and name only the outline you have selected' },
+    { key: 'all',      text: 'Labels: all',      title: 'Name every visible outline as well' },
+    { key: 'off',      text: 'Labels: off',      title: 'No labels at all' },
+  ];
   $('#btnLabels').addEventListener('click', (e) => {
-    vp.showLabels = !vp.showLabels;
-    e.currentTarget.classList.toggle('on', vp.showLabels);
+    const i = LABEL_MODES.findIndex(m => m.key === vp.labelMode);
+    const next = LABEL_MODES[(i + 1) % LABEL_MODES.length];
+    vp.labelMode = next.key;
+    const b = e.currentTarget;
+    b.textContent = next.text;
+    b.title = next.title;
+    b.classList.toggle('on', next.key !== 'off');
     renderScene();
   });
 
@@ -1215,7 +1228,13 @@ function comparisonSummary() {
 
 function renderScene() {
   const layers = effLayers();
-  const structures = project.structures.map(st => ({ ...st, footprint: structureFootprint(st) }));
+  // Hiding an outline hides whatever is built on it. Two independent switches for
+  // one visible thing is a surprise: hide the neighbour's parcel and you expect
+  // the neighbour's block to go with it. The Building tab's own hide still works.
+  const structures = project.structures.map(st => {
+    const src = project.layers.find(l => l.id === st.sourceLayerId);
+    return { ...st, hidden: st.hidden || !!src?.hidden, footprint: structureFootprint(st) };
+  });
   // Label and marker sizes are derived from the extent, so this has to run first.
   vp.setContentScale([
     ...layers.filter(l => !l.hidden && l.polygon).flatMap(l => l.polygon),
@@ -1227,6 +1246,32 @@ function renderScene() {
   vp.setUnderlay(project.underlay);
 }
 
+const BANNER_HIDDEN_KEY = 'chauhaddi.bannerHidden';
+
+/**
+ * The notice can be put away, because it was covering the model it is about.
+ * It collapses to a chip rather than vanishing, and the warning it carries is
+ * printed on every export regardless of what is on screen — so hiding it costs
+ * nothing that matters.
+ */
+function bindTierBanner() {
+  const banner = $('#tierBanner');
+  const chip = $('#tierChip');
+  const paint = (visible) => {
+    banner.hidden = !visible;
+    chip.hidden = visible;
+  };
+  $('#btnDismissBanner').addEventListener('click', () => {
+    localStorage.setItem(BANNER_HIDDEN_KEY, '1');
+    paint(false);
+  });
+  chip.addEventListener('click', () => {
+    localStorage.removeItem(BANNER_HIDDEN_KEY);
+    paint(true);
+  });
+  paint(localStorage.getItem(BANNER_HIDDEN_KEY) !== '1');
+}
+
 function renderStatus() {
   const layers = project.layers;
   const tiers = [...new Set(layers.map(l => l.tier))].sort();
@@ -1236,12 +1281,13 @@ function renderStatus() {
   const sel = layers.find(l => l.id === selectedLayerId);
   $('#stArea').textContent = sel?.computedArea != null ? `${sel.name}: ${fmtSqFt(sel.computedArea)}` : '—';
 
+  // Only the text is rewritten — the dismiss button must survive a re-render.
   const worstTier = tiers.includes('A') ? 'A' : tiers[0];
-  const banner = $('#tierBanner');
+  const text = $('#tierBannerText');
   if (layers.length && worstTier === 'A') {
-    banner.innerHTML = '<b>Instrument survey present</b>Tier A geometry may be spoken to as measurement — but only by the licensed surveyor who took it.';
+    text.innerHTML = '<b>Instrument survey present</b>Tier A geometry may be spoken to as measurement — but only by the licensed surveyor who took it.';
   } else {
-    banner.innerHTML = '<b>Demonstrative only</b>This is an illustration of evidence, not evidence of a boundary. No figure here is a survey.';
+    text.innerHTML = '<b>Demonstrative only</b>This is an illustration of evidence, not evidence of a boundary. No figure here is a survey.';
   }
 }
 
