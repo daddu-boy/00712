@@ -692,6 +692,14 @@ function renderCompare() {
   if (layers.length) {
     selA.value = layers.some(l => l.id === keepA) ? keepA : layers[0].id;
     selB.value = layers.some(l => l.id === keepB) ? keepB : (layers[1]?.id || layers[0].id);
+    // With one outline both selects necessarily point at it. Once a second
+    // arrives, B has to move off A by itself, or the panel reports that a second
+    // outline is needed while two are sitting in the list — which is exactly the
+    // moment the tool is supposed to pay off.
+    if (selA.value === selB.value && layers.length > 1) {
+      const other = [...layers].reverse().find(l => l.id !== selA.value);
+      if (other) selB.value = other.id;
+    }
   }
   $('#cmpCorner').disabled = $('#cmpAlign').value !== 'corner';
 
